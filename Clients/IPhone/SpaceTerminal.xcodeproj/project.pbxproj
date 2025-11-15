@@ -1,0 +1,40 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1A2B3C4D5E6F /* SpaceTerminalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6E /* SpaceTerminalApp.swift */; };
+		1A2B3C4D5E70 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F /* ContentView.swift */; };
+		1A2B3C4D5E71 /* WebSocketClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E70 /* WebSocketClient.swift */; };
+		1A2B3C4D5E72 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E71 /* Models.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		1A2B3C4D5E6D /* SpaceTerminal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SpaceTerminal.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1A2B3C4D5E6E /* SpaceTerminalApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceTerminalApp.swift; sourceTree = "<group>"; };
+		1A2B3C4D5E6F /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		1A2B3C4D5E70 /* WebSocketClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketClient.swift; sourceTree = "<group>"; };
+		1A2B3C4D5E71 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		1A2B3C4D5E6C /* SpaceTerminal */ = {
+			isa = PBXGroup;
+			children = (
+				1A2B3C4D5E6E /* SpaceTerminalApp.swift */,
+				1A2B3C4D5E6F /* ContentView.swift */,
+				1A2B3C4D5E70 /* WebSocketClient.swift */,
+				1A2B3C4D5E71 /* Models.swift */,
+			);
+			path = SpaceTerminal;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+	};
+	rootObject = 1A2B3C4D5E6A /* Project object */;
+}
