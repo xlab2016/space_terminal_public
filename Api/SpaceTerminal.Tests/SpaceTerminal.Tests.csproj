@@ -20,6 +20,7 @@
   <ItemGroup>
     <ProjectReference Include="..\SpaceTerminal.Core\SpaceTerminal.Core.csproj" />
     <ProjectReference Include="..\SpaceTerminal.Infrastructure\SpaceTerminal.Infrastructure.csproj" />
+    <ProjectReference Include="..\SpaceTerminal.Api\SpaceTerminal.Api.csproj" />
   </ItemGroup>
 
 </Project>

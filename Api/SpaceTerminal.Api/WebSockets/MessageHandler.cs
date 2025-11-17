@@ -128,28 +128,32 @@ public class MessageHandler
     {
         try
         {
-            var confirmation = System.Text.Json.JsonSerializer.Deserialize<dynamic>(message.Payload);
-            var commandId = confirmation?.commandId?.ToString();
-            var approved = confirmation?.approved?.GetBoolean() ?? false;
+            using var doc = System.Text.Json.JsonDocument.Parse(message.Payload);
+            var root = doc.RootElement;
+            var commandId = root.TryGetProperty("commandId", out var cmdIdElement) ? cmdIdElement.GetString() : null;
+            var approved = root.TryGetProperty("approved", out var approvedElement) && approvedElement.GetBoolean();
 
-            if (commandId != null && _pendingCommands.TryGetValue(commandId, out var command))
+            if (commandId != null)
             {
-                command.Status = approved ? CommandStatus.Confirmed : CommandStatus.Rejected;
-                command.ConfirmedAt = DateTime.UtcNow;
-
-                // Notify requester
-                var requester = await _clientManager.GetClientAsync(command.RequesterId);
-                if (requester?.SessionId != null)
+                if (_pendingCommands.TryGetValue(commandId, out CommandExecution command))
                 {
-                    var response = new Message
-                    {
-                        Type = MessageType.CommandResponse,
-                        SenderId = "server",
-                        ReceiverId = command.RequesterId,
-                        Payload = System.Text.Json.JsonSerializer.Serialize(command)
-                    };
+                    command.Status = approved ? CommandStatus.Confirmed : CommandStatus.Rejected;
+                    command.ConfirmedAt = DateTime.UtcNow;
 
-                    await connectionManager.SendMessageAsync(requester.SessionId, response);
+                    // Notify requester
+                    var requester = await _clientManager.GetClientAsync(command.RequesterId);
+                    if (requester?.SessionId != null)
+                    {
+                        var response = new Message
+                        {
+                            Type = MessageType.CommandResponse,
+                            SenderId = "server",
+                            ReceiverId = command.RequesterId,
+                            Payload = System.Text.Json.JsonSerializer.Serialize(command)
+                        };
+
+                        await connectionManager.SendMessageAsync(requester.SessionId, response);
+                    }
                 }
             }
         }
@@ -241,25 +245,29 @@ public class MessageHandler
     {
         try
         {
-            var joinRequest = System.Text.Json.JsonSerializer.Deserialize<dynamic>(message.Payload);
-            var groupId = joinRequest?.groupId?.ToString();
+            using var doc = System.Text.Json.JsonDocument.Parse(message.Payload);
+            var root = doc.RootElement;
+            var groupId = root.TryGetProperty("groupId", out var groupIdElement) ? groupIdElement.GetString() : null;
 
-            if (groupId != null && _chatGroups.TryGetValue(groupId, out var group))
+            if (groupId != null)
             {
-                if (!group.MemberIds.Contains(message.SenderId))
+                if (_chatGroups.TryGetValue(groupId, out ChatGroup group))
                 {
-                    group.MemberIds.Add(message.SenderId);
+                    if (!group.MemberIds.Contains(message.SenderId))
+                    {
+                        group.MemberIds.Add(message.SenderId);
+                    }
+
+                    var response = new Message
+                    {
+                        Type = MessageType.ChatGroupJoin,
+                        SenderId = "server",
+                        ReceiverId = message.SenderId,
+                        Payload = System.Text.Json.JsonSerializer.Serialize(new { success = true, groupId })
+                    };
+
+                    await connectionManager.SendMessageAsync(connectionId, response);
                 }
-
-                var response = new Message
-                {
-                    Type = MessageType.ChatGroupJoin,
-                    SenderId = "server",
-                    ReceiverId = message.SenderId,
-                    Payload = System.Text.Json.JsonSerializer.Serialize(new { success = true, groupId })
-                };
-
-                await connectionManager.SendMessageAsync(connectionId, response);
             }
         }
         catch (Exception ex)

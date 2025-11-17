@@ -63,7 +63,7 @@ public class WebSocketConnectionManager
         }
     }
 
-    public async Task SendMessageAsync(string connectionId, Message message)
+    public virtual async Task SendMessageAsync(string connectionId, Message message)
     {
         if (_connections.TryGetValue(connectionId, out var webSocket) &&
             webSocket.State == WebSocketState.Open)
