@@ -17,13 +17,23 @@ public class WebSocketConnectionManager
 
         try
         {
-            var buffer = new byte[1024 * 64]; // 64KB buffer for large messages
+            var buffer = new byte[1024 * 64]; // 64KB buffer
 
             while (webSocket.State == WebSocketState.Open)
             {
-                var result = await webSocket.ReceiveAsync(
-                    new ArraySegment<byte>(buffer),
-                    CancellationToken.None);
+                using var ms = new MemoryStream();
+                WebSocketReceiveResult result;
+
+                // Read complete message (may be larger than buffer)
+                do
+                {
+                    result = await webSocket.ReceiveAsync(
+                        new ArraySegment<byte>(buffer),
+                        CancellationToken.None);
+
+                    ms.Write(buffer, 0, result.Count);
+                }
+                while (!result.EndOfMessage);
 
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
@@ -36,7 +46,8 @@ public class WebSocketConnectionManager
 
                 if (result.MessageType == WebSocketMessageType.Text)
                 {
-                    var messageJson = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                    ms.Seek(0, SeekOrigin.Begin);
+                    var messageJson = Encoding.UTF8.GetString(ms.ToArray());
                     var message = JsonSerializer.Deserialize<Message>(messageJson);
 
                     if (message != null)

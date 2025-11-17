@@ -168,13 +168,26 @@ public class MessageHandler
     private async Task HandleDesktopStreamAsync(Message message, string connectionId, WebSocketConnectionManager connectionManager)
     {
         // Forward desktop stream messages to the intended recipient
+        Console.WriteLine($"[DESKTOP] Type: {message.Type}, From: {message.SenderId}, To: {message.ReceiverId}");
+
         if (message.ReceiverId != null)
         {
             var targetClient = await _clientManager.GetClientAsync(message.ReceiverId);
             if (targetClient?.SessionId != null)
             {
+                Console.WriteLine($"[DESKTOP] Forwarding to session: {targetClient.SessionId}");
                 await connectionManager.SendMessageAsync(targetClient.SessionId, message);
             }
+            else
+            {
+                Console.WriteLine($"[DESKTOP] Target client not found or offline: {message.ReceiverId}");
+                await SendErrorAsync(connectionId, connectionManager, $"Target client {message.ReceiverId} not found or offline");
+            }
+        }
+        else
+        {
+            Console.WriteLine($"[DESKTOP] No ReceiverId specified");
+            await SendErrorAsync(connectionId, connectionManager, "ReceiverId is required for desktop streaming");
         }
     }
 
