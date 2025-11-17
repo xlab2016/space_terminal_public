@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -129,7 +130,8 @@ class Program
             Command = command,
             ClientId = targetId,
             RequesterId = _client!.Id,
-            Status = "PendingConfirmation"
+            Status = 0, // CommandStatus.PendingConfirmation
+            RequestedAt = DateTime.UtcNow
         };
 
         var message = new Message
@@ -272,12 +274,26 @@ class Program
 
     private static async Task HandleReceivedMessageAsync(Message message)
     {
-        Console.WriteLine($"\n[{message.Type}] Received from {message.SenderId}");
+        // Don't log CommandConfirmationRequest as it has its own UI
+        if (message.Type != MessageType.CommandConfirmationRequest)
+        {
+            Console.WriteLine($"\n[{message.Type}] Received from {message.SenderId}");
+        }
 
         switch (message.Type)
         {
             case MessageType.AuthenticationResponse:
-                Console.WriteLine("Authentication successful!");
+                try
+                {
+                    using var doc = JsonDocument.Parse(message.Payload);
+                    var root = doc.RootElement;
+                    var clientId = root.TryGetProperty("clientId", out var idElement) ? idElement.GetString() : _client?.Id;
+                    Console.WriteLine($"Authentication successful! Client ID: {clientId}");
+                }
+                catch
+                {
+                    Console.WriteLine($"Authentication successful! Client ID: {_client?.Id}");
+                }
                 break;
 
             case MessageType.CommandConfirmationRequest:
@@ -289,8 +305,17 @@ class Program
                 break;
 
             case MessageType.ChatMessage:
-                var chatMsg = JsonSerializer.Deserialize<dynamic>(message.Payload);
-                Console.WriteLine($"Chat from {message.SenderId}: {chatMsg?.Content}");
+                try
+                {
+                    using var chatDoc = JsonDocument.Parse(message.Payload);
+                    var chatRoot = chatDoc.RootElement;
+                    var content = chatRoot.TryGetProperty("Content", out var contentElement) ? contentElement.GetString() : "";
+                    Console.WriteLine($"Chat from {message.SenderId}: {content}");
+                }
+                catch
+                {
+                    Console.WriteLine($"Chat from {message.SenderId}: [unable to parse message]");
+                }
                 break;
 
             case MessageType.DesktopStreamStart:
@@ -309,29 +334,71 @@ class Program
                 Console.WriteLine($"Unhandled message type: {message.Type}");
                 break;
         }
-
-        Console.Write("\nPress Enter to continue...");
     }
 
     private static async Task HandleCommandConfirmationRequestAsync(Message message)
     {
-        var commandExecution = JsonSerializer.Deserialize<dynamic>(message.Payload);
-        var command = commandExecution?.Command?.ToString();
+        using var doc = JsonDocument.Parse(message.Payload);
+        var root = doc.RootElement;
+        var commandId = root.TryGetProperty("Id", out var idElement) ? idElement.GetString() : null;
+        var command = root.TryGetProperty("Command", out var cmdElement) ? cmdElement.GetString() : null;
 
-        Console.WriteLine($"\nCommand execution request from {message.SenderId}:");
-        Console.WriteLine($"Command: {command}");
-        Console.Write("Approve? (y/n): ");
+        Console.WriteLine($"\n[!] Command execution request received from {message.SenderId}");
+        Console.WriteLine($"    Command: {command}");
+        Console.WriteLine($"    Opening confirmation window...");
 
-        var response = Console.ReadLine()?.ToLower();
-        var approved = response == "y" || response == "yes";
+        // Create temporary PowerShell script for confirmation
+        var tempScript = Path.Combine(Path.GetTempPath(), $"confirm_{Guid.NewGuid()}.ps1");
+        var scriptContent = $@"
+$host.UI.RawUI.WindowTitle = 'Command Confirmation Request'
+Write-Host ''
+Write-Host '================================================================' -ForegroundColor Cyan
+Write-Host '  COMMAND EXECUTION REQUEST' -ForegroundColor Yellow
+Write-Host '================================================================' -ForegroundColor Cyan
+Write-Host ''
+Write-Host 'From: {message.SenderId}' -ForegroundColor White
+Write-Host 'Command: {command}' -ForegroundColor Green
+Write-Host ''
+Write-Host '================================================================' -ForegroundColor Cyan
+Write-Host ''
+$response = Read-Host 'Approve and execute? (y/n)'
+if ($response -eq 'y' -or $response -eq 'yes') {{
+    exit 0
+}} else {{
+    exit 1
+}}
+";
+        File.WriteAllText(tempScript, scriptContent);
 
-        if (approved)
+        var approved = false;
+        string output = "";
+        string error = "";
+
+        try
         {
-            // Execute command
-            Console.WriteLine("Executing command...");
-            try
+            // Open confirmation in new window
+            var confirmProcess = new System.Diagnostics.Process
             {
-                var process = new System.Diagnostics.Process
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "powershell.exe",
+                    Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{tempScript}\"",
+                    UseShellExecute = true,
+                    CreateNoWindow = false
+                }
+            };
+
+            confirmProcess.Start();
+            await confirmProcess.WaitForExitAsync();
+            approved = confirmProcess.ExitCode == 0;
+
+            Console.WriteLine($"    User response: {(approved ? "APPROVED" : "REJECTED")}");
+
+            if (approved)
+            {
+                // Execute command
+                Console.WriteLine($"    Executing command...");
+                var execProcess = new System.Diagnostics.Process
                 {
                     StartInfo = new System.Diagnostics.ProcessStartInfo
                     {
@@ -344,21 +411,36 @@ class Program
                     }
                 };
 
-                process.Start();
-                var output = await process.StandardOutput.ReadToEndAsync();
-                var error = await process.StandardError.ReadToEndAsync();
-                await process.WaitForExitAsync();
+                execProcess.Start();
+                output = await execProcess.StandardOutput.ReadToEndAsync();
+                error = await execProcess.StandardError.ReadToEndAsync();
+                await execProcess.WaitForExitAsync();
 
-                Console.WriteLine($"Output: {output}");
+                Console.WriteLine($"    ✓ Command executed successfully");
+                if (!string.IsNullOrEmpty(output))
+                {
+                    Console.WriteLine($"\n    Output:\n{output}");
+                }
                 if (!string.IsNullOrEmpty(error))
                 {
-                    Console.WriteLine($"Error: {error}");
+                    Console.WriteLine($"\n    Error:\n{error}");
                 }
             }
-            catch (Exception ex)
+            else
             {
-                Console.WriteLine($"Execution failed: {ex.Message}");
+                Console.WriteLine($"    Command rejected by user");
             }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"    ✗ Error: {ex.Message}");
+            error = ex.Message;
+            approved = false;
+        }
+        finally
+        {
+            // Clean up temp script
+            try { File.Delete(tempScript); } catch { }
         }
 
         var confirmationMessage = new Message
@@ -368,7 +450,7 @@ class Program
             ReceiverId = message.SenderId,
             Payload = JsonSerializer.Serialize(new
             {
-                commandId = commandExecution?.Id?.ToString(),
+                commandId = commandId,
                 approved = approved
             })
         };

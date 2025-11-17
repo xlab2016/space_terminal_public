@@ -76,6 +76,8 @@ public class MessageHandler
 
                 _connectionToClientMap.TryAdd(connectionId, client.Id);
 
+                Console.WriteLine($"[AUTH] Client authenticated - ID: {client.Id}, Name: {client.Name}, Type: {client.Type}");
+
                 var response = new Message
                 {
                     Type = MessageType.AuthenticationResponse,
